@@ -1,0 +1,78 @@
+diff --git a/lib/sbi/objects.mk b/lib/sbi/objects.mk
+index c774ebb..8576538 100644
+--- a/lib/sbi/objects.mk
++++ b/lib/sbi/objects.mk
+@@ -68,3 +68,4 @@ libsbi-objs-y += sbi_tlb.o
+ libsbi-objs-y += sbi_trap.o
+ libsbi-objs-y += sbi_unpriv.o
+ libsbi-objs-y += sbi_expected_trap.o
++libsbi-objs-y += sbi_ecall_fortune.o
+diff --git a/lib/sbi/sbi_ecall.c b/lib/sbi/sbi_ecall.c
+index 25dd78c..4e918ad 100644
+--- a/lib/sbi/sbi_ecall.c
++++ b/lib/sbi/sbi_ecall.c
+@@ -157,5 +157,9 @@ int sbi_ecall_init(void)
+ 			return ret;
+ 	}
+ 
++	/* Fortune telling extension */
++	extern void sbi_ecall_fortune_register(void);
++	sbi_ecall_fortune_register();
++
+ 	return 0;
+ }
+diff --git a/lib/sbi/sbi_ecall_fortune.c b/lib/sbi/sbi_ecall_fortune.c
+new file mode 100644
+index 0000000..52109fc
+--- /dev/null
++++ b/lib/sbi/sbi_ecall_fortune.c
+@@ -0,0 +1,49 @@
++// SPDX-License-Identifier: BSD-2-Clause
++#include <sbi/sbi_ecall.h>
++#include <sbi/sbi_ecall_interface.h>
++#include <sbi/sbi_trap.h>
++#include <sbi/riscv_asm.h>
++#include <sbi/sbi_error.h>
++
++#define SBI_EXT_FORTUNE         0x0FAB0000
++#define SBI_FORTUNE_GET_CSR     0x01
++#define SBI_FORTUNE_GET_MSTATUS 0x02
++
++static const uint64_t MAGIC = 0x52495343562d4d21;
++
++static int sbi_ecall_fortune_handler(unsigned long extid, unsigned long funcid,
++				      const struct sbi_trap_regs *regs,
++				      unsigned long *out_val,
++				      struct sbi_trap_info *out_trap)
++{
++	uint64_t result = 0;
++
++	switch (funcid) {
++	case SBI_FORTUNE_GET_CSR:
++		result = csr_read(CSR_MCYCLE);
++		result = (result ^ MAGIC);
++		result = ((result << 13) | (result >> 51)) ^ 0xDEADBEEF;
++		break;
++	case SBI_FORTUNE_GET_MSTATUS:
++		result = csr_read(CSR_MSTATUS);
++		result = ~result;
++		break;
++	default:
++		return SBI_ERR_NOT_SUPPORTED;
++	}
++
++	*out_val = result;
++	return 0;
++}
++
++struct sbi_ecall_extension ecall_fortune = {
++	.extid_start = SBI_EXT_FORTUNE,
++	.extid_end   = SBI_EXT_FORTUNE,
++	.handle      = sbi_ecall_fortune_handler,
++};
++
++void sbi_ecall_fortune_register(void)
++{
++	sbi_ecall_register_extension(&ecall_fortune);
++}
++

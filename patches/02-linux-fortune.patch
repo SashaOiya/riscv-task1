@@ -1,0 +1,65 @@
+diff --git a/arch/riscv/include/uapi/asm/unistd.h b/arch/riscv/include/uapi/asm/unistd.h
+index 950ab3fd4..b4937371d 100644
+--- a/arch/riscv/include/uapi/asm/unistd.h
++++ b/arch/riscv/include/uapi/asm/unistd.h
+@@ -51,4 +51,7 @@ __SYSCALL(__NR_riscv_flush_icache, sys_riscv_flush_icache)
+ #ifndef __NR_riscv_hwprobe
+ #define __NR_riscv_hwprobe (__NR_arch_specific_syscall + 14)
+ #endif
++#define __NR_riscv_hwprobe (__NR_arch_specific_syscall + 14)
+ __SYSCALL(__NR_riscv_hwprobe, sys_riscv_hwprobe)
++#define __NR_riscv_csr_fortune (__NR_arch_specific_syscall + 16)
++__SYSCALL(__NR_riscv_csr_fortune, sys_csr_fortune)
+diff --git a/arch/riscv/kernel/sys_riscv.c b/arch/riscv/kernel/sys_riscv.c
+index f1c1416a9..26599f3e5 100644
+--- a/arch/riscv/kernel/sys_riscv.c
++++ b/arch/riscv/kernel/sys_riscv.c
+@@ -5,6 +5,7 @@
+  * Copyright (C) 2017 SiFive
+  */
+ 
++#include <asm/sbi.h>
+ #include <linux/syscalls.h>
+ #include <asm/cacheflush.h>
+ #include <asm-generic/mman-common.h>
+@@ -43,6 +44,23 @@ SYSCALL_DEFINE6(mmap2, unsigned long, addr, unsigned long, len,
+ }
+ #endif
+ 
++SYSCALL_DEFINE1(csr_fortune, int, type)
++{
++    struct sbiret ret;
++    uint64_t result = 0;
++
++    if (type == 0) {
++        ret = sbi_ecall(0x0FAB0000, 0x01, 0, 0, 0, 0, 0, 0);
++        if (!ret.error) result = ret.value;
++    } else if (type == 1) {
++        ret = sbi_ecall(0x0FAB0000, 0x02, 0, 0, 0, 0, 0, 0);
++        if (!ret.error) result = ret.value;
++    } else {
++        return -EINVAL;
++    }
++    return result;
++}
++
+ /*
+  * Allows the instruction cache to be flushed from userspace.  Despite RISC-V
+  * having a direct 'fence.i' instruction available to userspace (which we
+diff --git a/include/uapi/asm-generic/unistd.h b/include/uapi/asm-generic/unistd.h
+index 75f00965a..31cdceaea 100644
+--- a/include/uapi/asm-generic/unistd.h
++++ b/include/uapi/asm-generic/unistd.h
+@@ -841,9 +841,11 @@ __SYSCALL(__NR_lsm_get_self_attr, sys_lsm_get_self_attr)
+ __SYSCALL(__NR_lsm_set_self_attr, sys_lsm_set_self_attr)
+ #define __NR_lsm_list_modules 461
+ __SYSCALL(__NR_lsm_list_modules, sys_lsm_list_modules)
++#define __NR_csr_fortune 462
++__SYSCALL(__NR_csr_fortune, sys_csr_fortune)
+ 
+ #undef __NR_syscalls
+-#define __NR_syscalls 462
++#define __NR_syscalls 463
+ 
+ /*
+  * 32 bit systems traditionally used different
