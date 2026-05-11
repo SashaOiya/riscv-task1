@@ -1,38 +1,29 @@
-# RISC-V Performance Counter Access via Custom Syscalls
+# RISC-V Fortune Teller — чтение CSR через SBI + syscall
 
-Данный проект реализует механизм доступа к аппаратным счетчикам производительности RISC-V (`mcycle`, `minstret`) из пространства пользователя через добавление кастомных системных вызовов в ядро Linux.
+## 📌 Задача
 
-## Структура проекта
-* `get_mcycle.c` - Тестовое приложение (User-space), использующее новые сискаллы.
-* `patches/` - Диффы для автоматической модификации исходников:
-    * `01-opensbi-mcycle.patch` - Разрешение доступа к CSR в OpenSBI.
-    * `02-linux-mcycle.patch` - Добавление сискаллов в таблицу и ядро.
-* `scripts/configure.sh` - Скрипт проверки окружения, клонирования и патчинга.
-* `build.sh` - Полная сборка всех компонентов (OpenSBI, Kernel, App).
-* `run_qemu.sh` - Скрипт запуска эмулятора с собранными бинарниками.
+> * Добавить новый системный вызов в Linux kernel  
+> * Добавить новый вызов SBI  
+> * Напечатать в приложении значение CSR, полученного по этой цепочке из M‑Mode  
+## 🎯 Решение
 
-## Технические детали
-* **Архитектура:** RISC-V (64-bit, rv64gc).
-* **Системные вызовы:**
-    * `#462`: `sys_get_mcycle` - возвращает значение регистра `mcycle`.
-    * `#463`: `sys_get_minstret` - возвращает значение регистра `minstret`.
-* **Окружение:** QEMU Virt Machine, Linux Kernel v6.8, OpenSBI v1.2.
-* **Режим запуска:** Static Initramfs (тестовое приложение является единственным процессом `init`).
+- Приложение вызывает системный вызов `csr_fortune(type)`
+- Ядро Linux через `sbi_ecall` обращается к новому SBI‑расширению `SBI_EXT_FORTUNE`
+- OpenSBI в M‑mode читает `mcycle` или `mstatus` и применяет **магические преобразования**:
+  - XOR с ASCII‑константой `"RISCV-M!"`
+  - циклический сдвиг влево на 13 бит  
+  - XOR с `0xDEADBEEF` (для `mcycle`)
+  - инверсия битов (для `mstatus`)
+- Результат («пророчество») возвращается обратно в приложение
 
-## Инструкция по запуску
+Таким образом, CSR‑значение действительно проходит путь **U‑Mode → syscall → S‑Mode → SBI → M‑Mode → обратно**.
 
-### 1. Подготовка и конфигурация
-Скрипт проверит наличие `qemu-system-riscv64` и кросс-компилятора `riscv64-linux-gnu-gcc`, скачает исходники и наложит патчи:
+## 🚀 Запуск
+
 ```bash
-chmod +x scripts/*.sh *.sh
+git clone https://github.com/SashaOiya/riscv-task1.git
+cd riscv-task1
+chmod +x scripts/*.sh
 ./scripts/configure.sh
-```
-### 2. Сборка системы
-Компиляция всех компонентов:
-```bash
-./build.sh
-```
-### 3. Запуск эмуляцмм
-```bash
-./run_qemu.sh
-```
+./scripts/build.sh
+./scripts/run_qemu.sh
